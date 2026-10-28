@@ -1,9 +1,11 @@
+
 import json
+from pathlib import Path
+
 import numpy as np
 import streamlit as st
 import tensorflow as tf
 from PIL import Image
-from pathlib import Path
 
 # Konfigurasi halaman
 st.set_page_config(
@@ -12,8 +14,8 @@ st.set_page_config(
     layout="centered"
 )
 
-# Lokasi model dan label di Google Drive
-FOLDER = Path("/content/drive/MyDrive/AI_Pengenal_Bunga")
+# Lokasi file model dan label di repositori GitHub
+FOLDER = Path(__file__).parent
 FILE_MODEL = FOLDER / "model_bunga_mobilenet.keras"
 FILE_LABEL = FOLDER / "kelas_bunga_mobilenet.json"
 
@@ -23,60 +25,107 @@ st.write(
     "satu dari 10 jenis bunga."
 )
 
+# Memuat model AI
 @st.cache_resource
 def muat_model():
     model = tf.keras.models.load_model(
         FILE_MODEL,
         compile=False
     )
+
     with open(FILE_LABEL, "r", encoding="utf-8") as f:
         kelas = json.load(f)
+
     return model, kelas
 
 try:
     model, kelas_bunga = muat_model()
     st.success("Model AI berhasil dimuat!")
 except Exception as e:
-    st.error("Model gagal dimuat. Periksa file model dan JSON.")
+    st.error("Model AI gagal dimuat.")
+    st.write("Pastikan file model dan JSON ada di repositori.")
     st.exception(e)
     st.stop()
 
+# Fungsi prediksi bunga
 def prediksi_bunga(file_gambar):
     gambar = Image.open(file_gambar).convert("RGB")
     gambar_tampil = gambar.copy()
     gambar = gambar.resize((224, 224))
 
-    array_gambar = np.array(gambar, dtype=np.float32) / 255.0
-    array_gambar = np.expand_dims(array_gambar, axis=0)
+    array_gambar = np.array(
+        gambar, dtype=np.float32
+    ) / 255.0
+
+    array_gambar = np.expand_dims(
+        array_gambar, axis=0
+    )
 
     hasil = model.predict(array_gambar, verbose=0)[0]
     indeks = int(np.argmax(hasil))
 
-    return gambar_tampil, kelas_bunga[indeks], float(hasil[indeks]) * 100
+    nama_bunga = kelas_bunga[indeks]
+    keyakinan = float(hasil[indeks]) * 100
 
-tab_upload, tab_kamera = st.tabs(["📁 Unggah Foto", "📷 Kamera"])
+    return gambar_tampil, nama_bunga, keyakinan
+
+# Tab unggah foto dan kamera
+tab_upload, tab_kamera = st.tabs(
+    ["📁 Unggah Foto", "📷 Kamera"]
+)
 
 with tab_upload:
     file_upload = st.file_uploader(
         "Pilih foto bunga",
-        type=["jpg", "jpeg", "png", "webp"],
-        key="upload"
+        type=["jpg", "jpeg", "png", "webp"]
     )
 
     if file_upload is not None:
-        gambar, nama, keyakinan = prediksi_bunga(file_upload)
-        st.image(gambar, caption="Foto yang dipilih", use_container_width=True)
-        st.subheader(f"🌼 Prediksi: {nama.replace('_', ' ').title()}")
-        st.write(f"Tingkat kepercayaan: **{keyakinan:.2f}%**")
+        try:
+            gambar, nama, keyakinan = prediksi_bunga(file_upload)
+
+            st.image(
+                gambar,
+                caption="Foto yang dipilih",
+                use_container_width=True
+            )
+
+            st.subheader(
+                f"🌼 Prediksi: {nama.replace('_', ' ').title()}"
+            )
+
+            st.write(
+                f"Tingkat kepercayaan: **{keyakinan:.2f}%**"
+            )
+        except Exception as e:
+            st.error("Foto gagal diproses.")
+            st.exception(e)
 
 with tab_kamera:
     foto_kamera = st.camera_input("Ambil foto bunga")
 
     if foto_kamera is not None:
-        gambar, nama, keyakinan = prediksi_bunga(foto_kamera)
-        st.image(gambar, caption="Foto dari kamera", use_container_width=True)
-        st.subheader(f"🌼 Prediksi: {nama.replace('_', ' ').title()}")
-        st.write(f"Tingkat kepercayaan: **{keyakinan:.2f}%**")
+        try:
+            gambar, nama, keyakinan = prediksi_bunga(foto_kamera)
+
+            st.image(
+                gambar,
+                caption="Foto dari kamera",
+                use_container_width=True
+            )
+
+            st.subheader(
+                f"🌼 Prediksi: {nama.replace('_', ' ').title()}"
+            )
+
+            st.write(
+                f"Tingkat kepercayaan: **{keyakinan:.2f}%**"
+            )
+        except Exception as e:
+            st.error("Foto gagal diproses.")
+            st.exception(e)
 
 st.divider()
-st.caption("Proyek AI Pengenal Bunga — model klasifikasi 10 jenis bunga.")
+st.caption(
+    "Proyek AI Pengenal Bunga — klasifikasi 10 jenis bunga."
+)
